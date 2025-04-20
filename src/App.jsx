@@ -125,7 +125,7 @@ function App ()
 
       <header>
         <img src={logoImg} alt='Stylized globe' />
-        <h1>PlacePicker</h1>
+        <h1>Любимые места</h1>
         <p>
           Создайте свою личную коллекцию мест, которые вы хотели бы посетить или
           которые вы уже посетили.
