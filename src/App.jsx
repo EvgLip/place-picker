@@ -1,18 +1,42 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 
 import Places from './components/Places.jsx';
 import Modal from './components/Modal.jsx';
 import DeleteConfirmation from './components/DeleteConfirmation.jsx';
 import logoImg from './assets/logo.png';
 import AvailablePlaces from './components/AvailablePlaces.jsx';
+import { fetchPlaces, updateUserPlaces } from './HTTP.js';
+import Error from './components/Error.jsx';
 
 function App ()
 {
   const selectedPlace = useRef();
-
   const [userPlaces, setUserPlaces] = useState([]);
-
   const [modalIsOpen, setModalIsOpen] = useState(false);
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingError, setLoadingError] = useState(null);
+
+  useEffect(function ()
+  {
+    getUserPlaces();
+
+    async function getUserPlaces ()
+    {
+      try
+      {
+        console.log(loadingError);
+        setIsLoading(true);
+        const places = await fetchPlaces('user-places');
+        setUserPlaces(places);
+      }
+      catch (error) 
+      {
+        setLoadingError({ message: error.message || 'Данные не получены.' });
+      }
+      setIsLoading(false);
+    }
+  }, []);
 
   function handleStartRemovePlace (place)
   {
@@ -25,33 +49,73 @@ function App ()
     setModalIsOpen(false);
   }
 
-  function handleSelectPlace (selectedPlace)
+  async function handleSelectPlace (selectedPlace)
   {
-    setUserPlaces((prevPickedPlaces) =>
+    setUserPlaces(prevPickedPlaces =>
     {
-      if (!prevPickedPlaces)
-      {
-        prevPickedPlaces = [];
-      }
-      if (prevPickedPlaces.some((place) => place.id === selectedPlace.id))
-      {
+      if (!prevPickedPlaces) prevPickedPlaces = [];
+      //исключаем повторный выбор места
+      if (prevPickedPlaces.some(place => place.id === selectedPlace.id))
         return prevPickedPlaces;
-      }
+
       return [selectedPlace, ...prevPickedPlaces];
     });
+
+    //оптимистичное обновление
+    try
+    {
+      await updateUserPlaces([selectedPlace, ...userPlaces]);
+
+    } catch (error)
+    {
+      setUserPlaces(userPlaces);
+      setError(
+        {
+          message: error.message || 'Выбранное место не сохранено.'
+        }
+      );
+    }
   }
 
   const handleRemovePlace = useCallback(async function handleRemovePlace ()
   {
-    setUserPlaces((prevPickedPlaces) =>
-      prevPickedPlaces.filter((place) => place.id !== selectedPlace.current.id)
+    setUserPlaces(prevPickedPlaces =>
+      prevPickedPlaces.filter(place => place.id !== selectedPlace.current.id)
     );
 
+    try
+    {
+      const updatePlaces = userPlaces.filter(place => place.id !== selectedPlace.current.id);
+      await updateUserPlaces(updatePlaces);
+    }
+    catch (error)
+    {
+      setUserPlaces(userPlaces);
+      setError(
+        {
+          message: error.message || 'Выбранное место не удалено.'
+        }
+      );
+    }
+
     setModalIsOpen(false);
-  }, []);
+  }, [userPlaces]);
+
+  function handleError ()
+  {
+    setError(null);
+  }
 
   return (
     <>
+      <Modal open={error} onClick={handleError}>
+        {error && <Error
+          title='Ошибка!'
+          message={error.message}
+          onConfirm={handleError}
+        />}
+      </Modal>
+
       <Modal open={modalIsOpen} onClose={handleStopRemovePlace}>
         <DeleteConfirmation
           onCancel={handleStopRemovePlace}
@@ -60,7 +124,7 @@ function App ()
       </Modal>
 
       <header>
-        <img src={logoImg} alt="Stylized globe" />
+        <img src={logoImg} alt='Stylized globe' />
         <h1>PlacePicker</h1>
         <p>
           Создайте свою личную коллекцию мест, которые вы хотели бы посетить или
@@ -68,12 +132,17 @@ function App ()
         </p>
       </header>
       <main>
-        <Places
-          title="Я бы хотел навестить ..."
-          fallbackText="Ниже выберите места, которые вы хотели бы посетить."
-          places={userPlaces}
-          onSelectPlace={handleStartRemovePlace}
-        />
+        {loadingError && <Error title='Ошибка' message={loadingError.message} />}
+        {!loadingError &&
+          <Places
+            title='Что я хотел бы навестить ...'
+            fallbackText='Ниже выберите места, которые хотели бы посетить.'
+            places={userPlaces}
+            onSelectPlace={handleStartRemovePlace}
+            isLoading={isLoading}
+            loadingMessage='Идет загрузка данных. Ждите...'
+          />
+        }
 
         <AvailablePlaces onSelectPlace={handleSelectPlace} />
       </main>
