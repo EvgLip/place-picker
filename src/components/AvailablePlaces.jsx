@@ -1,48 +1,31 @@
-import { useEffect, useState } from 'react';
 import Places from './Places.jsx';
 import Error from './Error.jsx';
 import { sortPlacesByDistance } from '../loc.js';
-import { fetchAvailablePlaces } from '../HTTP.js';
+import { fetchPlaces } from '../HTTP.js';
+import useFetch from '../hooks/useFetch.js';
+
+async function fetchSortedPlaces ()
+{
+	const places = await fetchPlaces('places');
+	return new Promise((resolve, reject) =>
+	{
+		navigator.geolocation.getCurrentPosition(position =>
+		{
+			const sortedPlaces = sortPlacesByDistance(places, position.coords.lat, position.coords.lon);
+			return resolve(sortedPlaces);
+		});
+	});
+}
 
 export default function AvailablePlaces ({ onSelectPlace })
 {
-	const [availabelPlaces, setAvailabelPlaces] = useState([]);
-	const [isLoading, setIsLoading] = useState(false);
-	const [errors, setErrors] = useState(null);
+	const {
+		isLoading,
+		loadingError,
+		fetchedData: availabelPlaces
+	} = useFetch(fetchSortedPlaces, []);
 
-	useEffect(function ()
-	{
-		getPlaces();
-
-		async function getPlaces ()
-		{
-			try
-			{
-				setIsLoading(true);
-				const places = await fetchAvailablePlaces();
-
-				navigator.geolocation.getCurrentPosition(position =>
-				{
-					const sortedPlaces = sortPlacesByDistance(places, position.coords.lat, position.coords.lon);
-
-					setAvailabelPlaces(sortedPlaces);
-					setIsLoading(false);
-				});
-				// setAvailabelPlaces(places);
-			}
-			catch (error)
-			{
-				setErrors(
-					{
-						message: error.message || 'Не удалось найти место, попробуйте позже.'
-					});
-				setIsLoading(false);
-			}
-			// setIsLoading(false);
-		}
-	}, []);
-
-	if (errors) return <Error title='Ошибка' message={errors.message} />;
+	if (loadingError) return <Error title='Ошибка' message={loadingError.message} />;
 
 	return (
 		<Places
